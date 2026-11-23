@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+data/*.pgn
+data/*.npz
+data/*.zst
+stockfish/
+
+*.ckpt
+.DS_Store
+Thumbs.db

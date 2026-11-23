@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DL Chess Arena</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #121417;
+      color: #e6edf3;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { margin-top: 0; font-size: 1.5rem; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab-btn {
+      padding: 10px 18px;
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab-btn.active { background: #238636; color: #fff; border-color: #2ea043; }
+    .panel { display: none; }
+    .panel.active { display: grid; grid-template-columns: 280px 480px 320px; gap: 24px; align-items: start; }
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    label { display: block; margin-top: 12px; font-size: 0.85rem; color: #8b949e; }
+    select, input, button.action {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px 10px;
+      background: #0d1117;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    button.action {
+      margin-top: 16px;
+      background: #238636;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.action.stop { background: #da3633; }
+    .eval-wrap {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      position: relative;
+    }
+    .eval-bar {
+      width: 22px;
+      height: 440px;
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+    .eval-fill {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 50%;
+      background: #f0f6fc;
+      transition: height 0.25s ease;
+    }
+    .log-box {
+      height: 260px;
+      overflow-y: auto;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    .stat-row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 0.9rem; }
+    .game-over-banner {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      background: #1f6feb22;
+      border: 1px solid #58a6ff;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: 600;
+      color: #58a6ff;
+    }
+    .square-55d63 img {
+      transition: none !important;
+    }
+    .promo-overlay {
+      display: none;
+      position: absolute;
+      left: 34px;
+      top: 0;
+      width: 440px;
+      height: 440px;
+      background: rgba(13, 17, 23, 0.82);
+      z-index: 20;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 14px;
+      border-radius: 4px;
+    }
+    .promo-choices {
+      display: flex;
+      gap: 12px;
+      background: #161b22;
+      padding: 14px;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+    }
+    .promo-btn {
+      width: 64px;
+      height: 64px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .promo-btn:hover {
+      background: #2ea043;
+      border-color: #3fb950;
+    }
+    .promo-btn img {
+      width: 52px;
+      height: 52px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Deep Learning Chess Tournament & Interactive Arena</h1>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('human', this)">Human vs. Bot (Drag & Drop)</button>
+    <button class="tab-btn" onclick="switchTab('arena', this)">Bot vs. Bot Live Arena</button>
+  </div>
+
+  <div id="tab-human" class="panel active">
+    <div class="card">
+      <strong>Match Controls</strong>
+      <label>Opponent Model</label>
+      <select id="human-bot"></select>
+
+      <label>Your Color</label>
+      <select id="human-color">
+        <option value="white">White</option>
+        <option value="black">Black</option>
+      </select>
+
+      <label>Custom FEN (Optional)</label>
+      <input id="human-fen" placeholder="Leave blank for standard start" />
+
+      <button class="action" onclick="startHumanGame()">New Game / Reset</button>
+      <div id="human-banner" class="game-over-banner"></div>
+    </div>
+
+    <div class="eval-wrap">
+      <div class="eval-bar"><div id="human-eval-fill" class="eval-fill"></div></div>
+      <div id="human-board" style="width: 440px"></div>
+      <div id="promo-overlay" class="promo-overlay">
+        <strong>Choose Promotion Piece</strong>
+        <div id="promo-choices" class="promo-choices"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong id="human-status">Your turn (White)</strong>
+      <div class="stat-row"><span>Bot Latency:</span><span id="human-latency">-</span></div>
+      <div class="stat-row"><span>Nodes Evaluated:</span><span id="human-nodes">-</span></div>
+      <div class="stat-row"><span>White Win Prob:</span><span id="human-prob">50.0% (+0.00)</span></div>
+      <label>Move Log</label>
+      <div id="human-log" class="log-box"></div>
+    </div>
+  </div>
+
+  <div id="tab-arena" class="panel">
+    <div class="card">
+      <strong>Tournament Setup</strong>
+      <label>White Bot</label>
+      <select id="arena-white"></select>
+
+      <label>Black Bot</label>
+      <select id="arena-black"></select>
+
+      <label>Move Delay (ms): <span id="delay-val">300</span></label>
+      <input id="arena-delay" type="range" min="50" max="1500" step="50" value="300"
+             oninput="document.getElementById('delay-val').innerText = this.value" />
+
+      <button class="action" onclick="startArenaMatch()">Start Live Match</button>
+      <button class="action stop" onclick="stopArenaMatch()">Stop Match</button>
+      <div id="arena-banner" class="game-over-banner"></div>
+    </div>
+
+    <div class="eval-wrap">
+      <div class="eval-bar"><div id="arena-eval-fill" class="eval-fill"></div></div>
+      <div id="arena-board" style="width: 440px"></div>
+    </div>
+
+    <div class="card">
+      <strong id="arena-status">Ready</strong>
+      <div class="stat-row"><span>Last Move:</span><span id="arena-move">-</span></div>
+      <div class="stat-row"><span>Latency:</span><span id="arena-latency">-</span></div>
+      <div class="stat-row"><span>Nodes Evaluated:</span><span id="arena-nodes">-</span></div>
+      <div class="stat-row"><span>White Win Prob:</span><span id="arena-prob">50.0% (+0.00)</span></div>
+      <label>Live Move Log</label>
+      <div id="arena-log" class="log-box"></div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script>
+    const pieceTheme = "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png";
+    let humanGame = new Chess();
+    let humanBoard = null;
+    let humanColor = "white";
+    let botThinking = false;
+    let pendingPromotion = null;
+
+    let arenaGame = new Chess();
+    let arenaBoard = null;
+    let arenaRunning = false;
+
+    function switchTab(name, btn) {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + name).classList.add("active");
+      humanBoard.resize();
+      arenaBoard.resize();
+    }
+
+    async function loadBots() {
+      const res = await fetch("/api/bots");
+      const data = await res.json();
+      ["human-bot", "arena-white", "arena-black"].forEach(id => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = "";
+        data.bots.forEach(name => {
+          const opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          sel.appendChild(opt);
+        });
+      });
+    }
+
+    async function updateStockfishEval(fen, fillId, probId, game) {
+      if (game.in_checkmate()) {
+        const whiteWon = game.turn() === "b";
+        document.getElementById(fillId).style.height = whiteWon ? "100%" : "0%";
+        document.getElementById(probId).innerText = whiteWon ? "100.0% (Mate)" : "0.0% (Mate)";
+        return;
+      }
+      if (game.game_over()) {
+        document.getElementById(fillId).style.height = "50%";
+        document.getElementById(probId).innerText = "50.0% (0.00)";
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/eval", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fen: fen, depth: 12 })
+        });
+        const data = await res.json();
+        if (typeof data.winChance === "number") {
+          const pct = Math.max(0, Math.min(100, data.winChance));
+          document.getElementById(fillId).style.height = pct + "%";
+          let scoreLabel = "";
+          if (data.mate !== null && data.mate !== undefined && data.mate !== false) {
+            scoreLabel = (data.mate > 0 ? "+M" : "-M") + Math.abs(data.mate);
+          } else if (typeof data.eval === "number") {
+            scoreLabel = (data.eval >= 0 ? "+" : "") + data.eval.toFixed(2);
+          }
+          document.getElementById(probId).innerText = `${pct.toFixed(1)}% (${scoreLabel})`;
+        }
+      } catch (err) {
+        console.warn("Stockfish eval unavailable:", err);
+      }
+    }
+
+    function renderOfficialLog(boxId, game) {
+      const history = game.history();
+      const box = document.getElementById(boxId);
+      box.innerHTML = "";
+      for (let i = 0; i < history.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        const whiteMove = history[i];
+        const blackMove = history[i + 1] ? history[i + 1] : "";
+        const row = document.createElement("div");
+        row.textContent = `${moveNum}. ${whiteMove} ${blackMove}`.trim();
+        box.appendChild(row);
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function onDragStart(source, piece) {
+      if (botThinking || pendingPromotion || humanGame.game_over()) return false;
+      if (humanColor === "white" && (humanGame.turn() !== "w" || piece.search(/^b/) !== -1)) return false;
+      if (humanColor === "black" && (humanGame.turn() !== "b" || piece.search(/^w/) !== -1)) return false;
+    }
+
+    function isPromotionMove(source, target) {
+      const piece = humanGame.get(source);
+      if (!piece || piece.type !== "p") return false;
+      const targetRank = target.charAt(1);
+      if (piece.color === "w" && targetRank === "8") return true;
+      if (piece.color === "b" && targetRank === "1") return true;
+      return false;
+    }
+
+    function showPromotionPicker(source, target) {
+      pendingPromotion = { source, target };
+      const colorPrefix = humanGame.turn();
+      const choices = document.getElementById("promo-choices");
+      choices.innerHTML = "";
+
+      ["q", "r", "b", "n"].forEach(p => {
+        const btn = document.createElement("button");
+        btn.className = "promo-btn";
+        const img = document.createElement("img");
+        img.src = pieceTheme.replace("{piece}", colorPrefix + p.toUpperCase());
+        btn.appendChild(img);
+        btn.onclick = () => completePromotion(p);
+        choices.appendChild(btn);
+      });
+
+      document.getElementById("promo-overlay").style.display = "flex";
+    }
+
+    async function completePromotion(promoPiece) {
+      const { source, target } = pendingPromotion;
+      pendingPromotion = null;
+      document.getElementById("promo-overlay").style.display = "none";
+
+      const move = humanGame.move({ from: source, to: target, promotion: promoPiece });
+      humanBoard.position(humanGame.fen(), false);
+      if (move === null) return;
+
+      renderOfficialLog("human-log", humanGame);
+      updateStockfishEval(humanGame.fen(), "human-eval-fill", "human-prob", humanGame);
+
+      if (humanGame.game_over()) {
+        updateGameOver("human-status", "human-banner", humanGame);
+        return;
+      }
+      await requestHumanBotReply();
+    }
+
+    async function onDrop(source, target) {
+      const testMove = humanGame.move({ from: source, to: target, promotion: "q" });
+      if (testMove === null) return "snapback";
+      humanGame.undo();
+
+      if (isPromotionMove(source, target)) {
+        showPromotionPicker(source, target);
+        return;
+      }
+
+      humanGame.move({ from: source, to: target });
+      renderOfficialLog("human-log", humanGame);
+      updateStockfishEval(humanGame.fen(), "human-eval-fill", "human-prob", humanGame);
+
+      if (humanGame.game_over()) {
+        humanBoard.position(humanGame.fen(), false);
+        updateGameOver("human-status", "human-banner", humanGame);
+        return;
+      }
+      setTimeout(requestHumanBotReply, 30);
+    }
+
+    function onSnapEnd() {
+      if (!pendingPromotion) {
+        humanBoard.position(humanGame.fen(), false);
+      }
+    }
+
+    async function requestHumanBotReply() {
+      botThinking = true;
+      document.getElementById("human-status").innerText = "Bot thinking...";
+      const botName = document.getElementById("human-bot").value;
+
+      const res = await fetch("/api/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fen: humanGame.fen(), bot_name: botName })
+      });
+      const data = await res.json();
+
+      humanGame.move(data.san);
+      humanBoard.position(humanGame.fen());
+      renderOfficialLog("human-log", humanGame);
+
+      document.getElementById("human-latency").innerText = data.latency_ms + " ms";
+      document.getElementById("human-nodes").innerText = data.nodes_evaluated;
+      updateStockfishEval(humanGame.fen(), "human-eval-fill", "human-prob", humanGame);
+
+      botThinking = false;
+      if (humanGame.game_over()) {
+        updateGameOver("human-status", "human-banner", humanGame);
+      } else {
+        document.getElementById("human-status").innerText = "Your turn";
+      }
+    }
+
+    async function startHumanGame() {
+      pendingPromotion = null;
+      document.getElementById("promo-overlay").style.display = "none";
+
+      const fenInput = document.getElementById("human-fen").value.trim();
+      humanColor = document.getElementById("human-color").value;
+      humanGame = fenInput ? new Chess(fenInput) : new Chess();
+
+      const banner = document.getElementById("human-banner");
+      banner.style.display = "none";
+      banner.innerText = "";
+
+      humanBoard.orientation(humanColor);
+      humanBoard.position(humanGame.fen(), false);
+      document.getElementById("human-log").innerHTML = "";
+      document.getElementById("human-eval-fill").style.height = "50%";
+      document.getElementById("human-prob").innerText = "50.0% (+0.00)";
+      updateStockfishEval(humanGame.fen(), "human-eval-fill", "human-prob", humanGame);
+
+      if ((humanColor === "black" && humanGame.turn() === "w") ||
+          (humanColor === "white" && humanGame.turn() === "b")) {
+        await requestHumanBotReply();
+      } else {
+        document.getElementById("human-status").innerText = "Your turn";
+      }
+    }
+
+    async function startArenaMatch() {
+      arenaRunning = false;
+      await new Promise(r => setTimeout(r, 60));
+      arenaRunning = true;
+
+      const banner = document.getElementById("arena-banner");
+      banner.style.display = "none";
+      banner.innerText = "";
+
+      arenaGame = new Chess();
+      arenaBoard.position(arenaGame.fen(), false);
+      document.getElementById("arena-log").innerHTML = "";
+      document.getElementById("arena-eval-fill").style.height = "50%";
+      document.getElementById("arena-prob").innerText = "50.0% (+0.00)";
+
+      const whiteBot = document.getElementById("arena-white").value;
+      const blackBot = document.getElementById("arena-black").value;
+
+      while (arenaRunning && !arenaGame.game_over()) {
+        const activeBot = arenaGame.turn() === "w" ? whiteBot : blackBot;
+        document.getElementById("arena-status").innerText = "Turn: " + activeBot;
+
+        const res = await fetch("/api/move", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fen: arenaGame.fen(), bot_name: activeBot })
+        });
+        const data = await res.json();
+        if (!arenaRunning) break;
+
+        arenaGame.move(data.san);
+        arenaBoard.position(arenaGame.fen());
+
+        document.getElementById("arena-move").innerText = data.san;
+        document.getElementById("arena-latency").innerText = data.latency_ms + " ms";
+        document.getElementById("arena-nodes").innerText = data.nodes_evaluated;
+        updateStockfishEval(arenaGame.fen(), "arena-eval-fill", "arena-prob", arenaGame);
+        renderOfficialLog("arena-log", arenaGame);
+
+        const delay = parseInt(document.getElementById("arena-delay").value, 10);
+        await new Promise(r => setTimeout(r, delay));
+      }
+
+      if (arenaGame.game_over()) {
+        updateGameOver("arena-status", "arena-banner", arenaGame);
+      }
+      arenaRunning = false;
+    }
+
+    function stopArenaMatch() {
+      arenaRunning = false;
+      document.getElementById("arena-status").innerText = "Stopped";
+    }
+
+    function updateGameOver(statusId, bannerId, game) {
+      let msg = "Game Over - Draw";
+      let resultTag = "1/2-1/2";
+      if (game.in_checkmate()) {
+        const whiteWon = game.turn() === "b";
+        msg = "Checkmate! " + (whiteWon ? "White" : "Black") + " wins!";
+        resultTag = whiteWon ? "1-0" : "0-1";
+      } else if (game.in_stalemate()) {
+        msg = "Game Over - Stalemate";
+      } else if (game.in_threefold_repetition()) {
+        msg = "Game Over - Threefold Repetition";
+      } else if (game.insufficient_material()) {
+        msg = "Game Over - Insufficient Material";
+      }
+
+      const logId = statusId.startsWith("human") ? "human-log" : "arena-log";
+      const resultRow = document.createElement("div");
+      resultRow.style.fontWeight = "bold";
+      resultRow.style.marginTop = "6px";
+      resultRow.textContent = resultTag;
+      document.getElementById(logId).appendChild(resultRow);
+
+      document.getElementById(statusId).innerText = msg;
+      const banner = document.getElementById(bannerId);
+      banner.innerText = msg + " — Click New Game / Start to play again.";
+      banner.style.display = "block";
+    }
+
+    window.onload = async () => {
+      humanBoard = Chessboard("human-board", {
+        draggable: true,
+        dropOffBoard: "snapback",
+        position: "start",
+        pieceTheme: pieceTheme,
+        snapSpeed: 50,
+        moveSpeed: 120,
+        onDragStart: onDragStart,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd
+      });
+      arenaBoard = Chessboard("arena-board", {
+        draggable: false,
+        position: "start",
+        pieceTheme: pieceTheme,
+        moveSpeed: 120
+      });
+      await loadBots();
+    };
+  </script>
+</body>
+</html>
